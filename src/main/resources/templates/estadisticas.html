@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>CineLista - Estadisticas</title>
+    <th:block th:replace="~{fragments/cabecera :: comunes}"></th:block>
+    <th:block th:replace="~{fragments/cabecera :: datatables}"></th:block>
+    <th:block th:replace="~{fragments/cabecera :: datatables-buttons}"></th:block>
+
+    <style>
+        /* [RA5.E] Barra horizontal de la columna "Nota" */
+        .barra-datos {
+            background-color: #0d6efd;
+            color: #ffffff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            min-width: 28px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div th:replace="~{fragments/nav :: nav}"></div>
+
+<div class="container my-4">
+
+    <h1>Estadisticas</h1>
+
+    <table id="tabla-estadisticas" class="display" style="width:100%">
+        <thead>
+        <tr>
+            <th>Titulo</th>
+            <th>Genero</th>
+            <th>Taquilla</th>
+            <th>Nota</th>
+        </tr>
+        </thead>
+        <tbody>
+        <!-- Las filas las rellena DataTables -->
+        </tbody>
+        <tfoot>
+        <tr>
+            <!-- El total de la taquilla se escribe aqui desde footerCallback -->
+            <th>Total</th>
+            <th></th>
+            <th></th>
+            <th></th>
+        </tr>
+        </tfoot>
+    </table>
+
+</div>
+
+<script th:inline="javascript">
+    $(document).ready(function () {
+
+        // Endpoint REST (Thymeleaf anade el context-path si lo hubiera): GET /api/estadisticas
+        const URL_API = /*[[@{/api/estadisticas}]]*/ '/api/estadisticas';
+
+        // Nota maxima, para calcular el ancho de la barra en porcentaje
+        const maxNota = 10;
+
+        // Formato de moneda (euros, sin decimales)
+        const euros = new Intl.NumberFormat('es-ES', {
+            style: 'currency', currency: 'EUR', maximumFractionDigits: 0
+        });
+
+        $('#tabla-estadisticas').DataTable({
+
+            // Datos desde la API REST. La API devuelve un array JSON
+            // directamente (sin objeto contenedor), por eso dataSrc es ''.
+            ajax: {
+                url: URL_API,
+                dataSrc: ''
+            },
+
+            columns: [
+                {data: 'titulo'},
+                {data: 'genero'},
+                {
+                    data: 'taquilla',
+                    className: 'text-end',
+                    // Formateada solo al mostrar; para ordenar/exportar se usa el numero
+                    render: function (data, type) {
+                        return type === 'display' ? euros.format(data) : data;
+                    }
+                },
+                {
+                    // Columna grafica: barra proporcional a la nota
+                    data: 'nota',
+                    render: function (data, type, row) {
+                        if (type !== 'display') return data;
+                        const pct = Math.round((data / maxNota) * 100);
+                        return `<div class="barra-datos" style="width:${pct}%">${data}</div>`;
+                    }
+                }
+            ],
+
+            // Buscador/filtro nativo de DataTables (activo por defecto;
+            // se deja explicito).
+            searching: true,
+
+            // Total de la columna taquilla en el pie. Se recalcula
+            // sobre las filas que pasan el filtro de busqueda.
+            footerCallback: function () {
+                const api = this.api();
+                const total = api
+                    .column(2, {search: 'applied'})
+                    .data()
+                    .reduce(function (a, b) {
+                        return a + b;
+                    }, 0);
+                $(api.column(2).footer()).html(euros.format(total));
+            },
+
+            // Extension Buttons: B = botones (arriba), f = buscador
+            dom: 'Bfrtip',
+            buttons: [
+                {
+                    extend: 'csvHtml5',
+                    text: 'Exportar CSV',
+                    className: 'btn btn-primary',
+                    //  Nombre personalizado del fichero exportado
+                    // (DataTables le anade la extension .csv)
+                    filename: 'cinelista_estadisticas',
+                    title: null,                     // sin fila de titulo en el CSV
+                    exportOptions: {orthogonal: 'export'}   // numeros sin formato ni HTML
+                }
+            ],
+
+            language: {
+                search: 'Buscar:',
+                lengthMenu: 'Mostrar _MENU_ titulos',
+                zeroRecords: 'No se han encontrado resultados',
+                info: 'Mostrando _START_ a _END_ de _TOTAL_ titulos',
+                infoEmpty: 'Sin titulos',
+                infoFiltered: '(filtrado de _MAX_ en total)',
+                loadingRecords: 'Cargando...',
+                paginate: {first: 'Primero', last: 'Ultimo', next: 'Siguiente', previous: 'Anterior'}
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
